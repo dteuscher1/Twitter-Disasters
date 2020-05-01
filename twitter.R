@@ -44,3 +44,38 @@ twitter$numbers <- str_count(twitter$text, "[0-9]")
 # SVM: Matt
 # Random Forest: Shane
 # KNN: McKay
+
+# Replacing NAs with None...
+twitter$keyword <- replace_na(twitter$keyword, replace = "none")
+twitter$location <- replace_na(twitter$keyword, replace = "None")
+
+# Making the target variable a factor
+twitter$target <- as.factor(twitter$target)
+
+twitter$target <- revalue(twitter$target, c("0" = "N", "1" = "Y"))
+
+# Re-ordering columns. Unsure if necessary
+twitter <- twitter[, c(1:4, 6:12, 5)]
+
+# Naive Bayes: David 
+# SVM: Matt
+# Random Forest: Shane
+# KNN: McKay
+
+fitControl <- trainControl(method = "repeatedcv",
+                           number = 10,
+                           repeats = 10,
+                           ## Estimate class probabilities
+                           classProbs = TRUE,
+                           ## Evaluate performance using the following function
+                           summaryFunction = twoClassSummary)
+
+# Support Vector Machine
+svmFit <- train(target ~ . -id -text, 
+                data = twitter, 
+                method = "svmRadial", 
+                trControl = fitControl, 
+                preProc = c("center", "scale"),
+                tuneLength = 4,
+                metric = "ROC")
+svmFit 
