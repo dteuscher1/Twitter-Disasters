@@ -8,6 +8,7 @@ twitter <- read_csv("train.csv")
 
 ### Libraries ###
 library(stringr)
+library(sentimentr)
 
 # Specific words within text
 # #, urls, including images
@@ -39,6 +40,21 @@ head(twitter)
 
 # Numbers
 twitter$numbers <- str_count(twitter$text, "[0-9]")
+
+# Tone
+sentiment_df <- sentiment_by(get_sentences(twitter$text))
+
+twitter$tone <- sentiment_df$ave_sentiment
+
+# Word count
+twitter$word <- sentiment_df$word_count
+
+# Proportion of capital to lower case letters
+twitter <- twitter %>% mutate("cap.prop" = capital/characters)
+
+# filling missing values
+twitter$keyword[is.na(twitter$keyword)] <- "None"
+twitter$location[is.na(twitter$location)] <- "None"
 
 # Naive Bayes: David 
 # SVM: Matt
