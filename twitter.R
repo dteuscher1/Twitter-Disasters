@@ -17,10 +17,10 @@ library(stringr)
 # emojis
 
 #1 Punctuation - .!?,"'-
-twitter$url_count <- str_count(twitter$text, "http(.*)$")
+twitter$url_count <- str_count(twitter$text, "http(.+)$")
 
 # Removed urls
-twitter$text <- gsub("http(.*)$", "http", twitter$text)
+twitter$text <- gsub("http(.+)$", "http", twitter$text)
 
 twitter$punct_count <- str_count(twitter$text, "[.!?,\"'-]" )
 
