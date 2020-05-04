@@ -2,13 +2,15 @@
 # Twitter #
 ###########
 
-library(tidyverse)
-
-twitter <- read_csv("train.csv")
-
 ### Libraries ###
 library(stringr)
 library(sentimentr)
+library(tidyverse)
+library(caret)
+
+# Read in training data
+twitter <- read_csv("train.csv")
+
 
 # Specific words within text
 # #, urls, including images
@@ -36,7 +38,6 @@ twitter$characters <- nchar(twitter$text)
 
 # Capital letter
 twitter$capital <- str_count(twitter$text, "[A-Z]")
-head(twitter)
 
 # Numbers
 twitter$numbers <- str_count(twitter$text, "[0-9]")
@@ -95,3 +96,43 @@ svmFit <- train(target ~ . -id -text,
                 tuneLength = 4,
                 metric = "ROC")
 svmFit 
+
+# Naive Bayes
+
+# Add indicator variables for keyword and location
+twitter1 <- twitter %>%
+  mutate(target = factor(ifelse(target == 1, "Yes", "No"), levels = c("No", "Yes")),
+         keyword_ind = ifelse(is.na(keyword), 0, 1),
+         location_ind = ifelse(is.na(location), 0, 1))
+
+# Create data frame of predictor variables
+x <- twitter1 %>% select(-id, -text, -target, -keyword, -location) %>% as.data.frame()
+# Create vector of the response variable
+y <- twitter1$target
+
+# Specifies the type of cross validation and to return AUC, sensitivity, and specificity
+myControl <- trainControl(
+  method="cv",
+  number = 5,
+  classProbs = TRUE,
+  summaryFunction = twoClassSummary,
+)
+
+# Creates a grid to test different values of hyperparameters
+grid <- expand.grid(laplace=seq(0,10, length = 5), usekernel=c(TRUE,FALSE), adjust=seq(1,10, length = 5))
+
+# Fit of the Naive Bayes model
+nb.model <- train(
+  x=x,
+  y=y,
+  method = "naive_bayes",
+  trControl = myControl,
+  tuneGrid = grid,
+  metric="ROC"
+)
+
+nb.model
+summary(nb.model)
+
+# Show a plot comparing the models with different hyperparameter values
+plot(nb.model)  
