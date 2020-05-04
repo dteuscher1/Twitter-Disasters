@@ -2,6 +2,11 @@
 # Twitter #
 ###########
 
+# Naive Bayes: David 
+# SVM: Matt
+# Random Forest: Shane
+# KNN: McKay
+
 ### Libraries ###
 library(stringr)
 library(sentimentr)
@@ -53,32 +58,6 @@ twitter$word <- sentiment_df$word_count
 # Proportion of capital to lower case letters
 twitter <- twitter %>% mutate("cap.prop" = capital/characters)
 
-# filling missing values
-twitter$keyword[is.na(twitter$keyword)] <- "None"
-twitter$location[is.na(twitter$location)] <- "None"
-
-# Naive Bayes: David 
-# SVM: Matt
-# Random Forest: Shane
-# KNN: McKay
-
-# Replacing NAs with None...
-twitter$keyword <- replace_na(twitter$keyword, replace = "none")
-twitter$location <- replace_na(twitter$keyword, replace = "None")
-
-# Making the target variable a factor
-twitter$target <- as.factor(twitter$target)
-
-twitter$target <- revalue(twitter$target, c("0" = "N", "1" = "Y"))
-
-# Re-ordering columns. Unsure if necessary
-twitter <- twitter[, c(1:4, 6:12, 5)]
-
-# Naive Bayes: David 
-# SVM: Matt
-# Random Forest: Shane
-# KNN: McKay
-
 fitControl <- trainControl(method = "repeatedcv",
                            number = 10,
                            repeats = 10,
@@ -87,7 +66,17 @@ fitControl <- trainControl(method = "repeatedcv",
                            ## Evaluate performance using the following function
                            summaryFunction = twoClassSummary)
 
-# Support Vector Machine
+# SUPPORT VECTOR MACHINE
+# filling missing values
+twitter$keyword[is.na(twitter$keyword)] <- "None"
+twitter$location[is.na(twitter$location)] <- "None"
+
+# Making the target variable a factor
+twitter %>% mutate(target = if_else(target=='1', 'Y', 'N'))
+
+# Re-ordering columns. Unsure if necessary
+twitter <- twitter[, c(1:4, 6:12, 5)]
+
 svmFit <- train(target ~ . -id -text, 
                 data = twitter, 
                 method = "svmRadial", 
@@ -97,8 +86,8 @@ svmFit <- train(target ~ . -id -text,
                 metric = "ROC")
 svmFit 
 
-# Naive Bayes
 
+# NAIVE BAYES
 # Add indicator variables for keyword and location
 twitter1 <- twitter %>%
   mutate(target = factor(ifelse(target == 1, "Yes", "No"), levels = c("No", "Yes")),
@@ -115,7 +104,7 @@ myControl <- trainControl(
   method="cv",
   number = 5,
   classProbs = TRUE,
-  summaryFunction = twoClassSummary,
+  summaryFunction = twoClassSummary
 )
 
 # Creates a grid to test different values of hyperparameters
