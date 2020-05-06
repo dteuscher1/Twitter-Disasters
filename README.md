@@ -16,3 +16,8 @@ http://topepo.github.io/caret/index.html
 https://www.tidytextmining.com/
 #Chapter specifically about inverse document frequency
 https://www.tidytextmining.com/tfidf.html
+
+
+# Another good document going through some NLP stuff in R
+https://www.rpubs.com/nchung/cunymsds-607_prj-4
+
