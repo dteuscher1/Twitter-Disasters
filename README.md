@@ -12,3 +12,7 @@ https://www.kaggle.com/fnguyen/a-tidytext-approach-to-nlp-modeling-for-beginners
 ## Learning Caret Package
 http://topepo.github.io/caret/index.html
 
+# Text Mining with R
+https://www.tidytextmining.com/
+#Chapter specifically about inverse document frequency
+https://www.tidytextmining.com/tfidf.html
