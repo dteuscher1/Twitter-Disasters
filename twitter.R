@@ -125,3 +125,37 @@ summary(nb.model)
 
 # Show a plot comparing the models with different hyperparameter values
 plot(nb.model)  
+
+##################
+# Random Forests #
+##################
+
+library(randomForest)
+
+# Indicator for non-NA locations and keywords
+twitter$keywordInd <- !is.na(twitter$keyword)
+twitter$locationIng <- !is.na(twitter$location)
+
+# I didn't use the first few columns (id, keyword, location, text)
+twitter.clean <- twitter[,-c(1:4)]
+twitter.clean$target <- as.factor(twitter.clean$target)
+
+# Subsetting to creating training and testing sets
+twitter.sub <- sample(nrow(twitter), round(0.9*nrow(twitter)))
+twitter.train.use <- twitter.clean[twitter.sub,]
+twitter.train.test <- twitter.clean[-twitter.sub,]
+
+# Random Forest Model
+twitter.rf <- randomForest(target~.,
+                           data=twitter.train.use,
+                           mtry=5,
+                           ntree=800,
+                           importance=TRUE)
+
+# RF plots we did with Heaton, but I forgot what they mean lol
+plot(twitter.rf)
+varImpPlot(twitter.rf)
+
+# Prediction Assessment (I got around .72)
+twitter.train.test$predict <- predict(twitter.rf, newdata=twitter.train.test)
+sum(twitter.train.test$target == twitter.train.test$predict) / nrow(twitter.train.test)
