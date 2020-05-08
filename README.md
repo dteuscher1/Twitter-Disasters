@@ -20,6 +20,10 @@ https://www.tidytextmining.com/tfidf.html
 
 
 # Another good document going through some NLP stuff in R
+## Word2vec algorithm
+https://israelg99.github.io/2017-03-23-Word2Vec-Explained/
+
+## Other
 https://www.rpubs.com/nchung/cunymsds-607_prj-4
 https://cran.r-project.org/web/packages/text2vec/vignettes/text-vectorization.html#tf-idf
 https://cran.r-project.org/web/packages/superml/vignettes/Guide-to-TfidfVectorizer.html
