@@ -1,0 +1,167 @@
+---
+title: "Disaster Tweets: NLP Approaches"
+output: html_document
+---
+
+<!--
+TO DO:
+* Use custom features and tdf for classification
+* Create ensemble for multiple methods
+-->
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(stringr)
+library(sentimentr)
+library(tidyverse)
+library(caret)
+```
+
+# Feature Engineering
+
+To begin with, we created variables to represent any useful patterns found within texts that may indicate whether a given tweet is about a real disaster.
+
+```{r}
+custom_features <- function(twitter) {
+  # Wrapper for all custom variables
+  # Useful for adding custom features for train and test sets separately
+  # Args:
+  #   twitter: data.frame with twitter dataset from Kaggle nlp challenge
+  # Returns:
+  #   original twitter dataset including custom variable columns
+  
+  twitter <- twitter %>%
+    mutate(url_count = str_count(text, "http[\\S]+"),
+           text = str_replace_all(text, "http[\\S]+", "http"), # remove URLs
+           punct_count = str_count(text, "[.!?,\"'-]"),
+           handles_count = str_count(text, "[@]"),
+           hashtag_count = str_count(twitter$text, "[#]"),
+           char_count = nchar(twitter$text), # tweet length
+           capital_count = str_count(twitter$text, "[A-Z]"),
+           capital_prop = capital_count/char_count,
+           number_count = str_count(twitter$text, "[0-9]")
+           )
+  
+  # Add message tone variable
+  sentiment_df <- sentiment_by(get_sentences(twitter$text))
+  twitter$tone <- sentiment_df$ave_sentiment
+  
+  # Add word count
+  twitter$word <- sentiment_df$word_count
+  
+  return(twitter)
+}
+```
+
+```{r}
+# Read in training data
+twitter <- read_csv("train.csv")
+
+twitter <- custom_features(twitter)
+```
+
+# Support Vector Machine
+<!--NEED TO VERIFY IT WORKS AND PERFORMANCE-->
+
+```{r}
+# filling missing values
+twitter$keyword[is.na(twitter$keyword)] <- "None"
+twitter$location[is.na(twitter$location)] <- "None"
+
+# Making the target variable a factor
+twitter %>% mutate(target = if_else(target=='1', 'Y', 'N'))
+
+# Re-ordering columns. Unsure if necessary
+twitter <- twitter[, c(1:4, 6:12, 5)]
+
+svmFit <- train(target ~ . -id -text, 
+                data = twitter, 
+                method = "svmRadial", 
+                trControl = fitControl, 
+                preProc = c("center", "scale"),
+                tuneLength = 4,
+                metric = "ROC")
+svmFit 
+```
+
+# Naive Bayes
+
+```{r}
+# Add indicator variables for keyword and location
+twitter1 <- twitter %>%
+  mutate(target = factor(ifelse(target == 1, "Yes", "No"), levels = c("No", "Yes")),
+         keyword_ind = ifelse(is.na(keyword), 0, 1),
+         location_ind = ifelse(is.na(location), 0, 1))
+
+# Create data frame of predictor variables
+x <- twitter1 %>% select(-id, -text, -target, -keyword, -location) %>% as.data.frame()
+# Create vector of the response variable
+y <- twitter1$target
+
+# Specifies the type of cross validation and to return AUC, sensitivity, and specificity
+myControl <- trainControl(
+  method="cv",
+  number = 5,
+  classProbs = TRUE,
+  summaryFunction = twoClassSummary
+)
+
+# Creates a grid to test different values of hyperparameters
+grid <- expand.grid(laplace=seq(0,10, length = 5), usekernel=c(TRUE,FALSE), adjust=seq(1,10, length = 5))
+
+# Fit of the Naive Bayes model
+nb.model <- train(
+  x=x,
+  y=y,
+  method = "naive_bayes",
+  trControl = myControl,
+  tuneGrid = grid,
+  metric="ROC"
+)
+
+nb.model
+summary(nb.model)
+
+# Show a plot comparing the models with different hyperparameter values
+plot(nb.model)
+```
+
+# Random Forest
+
+```{r}
+library(randomForest)
+
+# Indicator for non-NA locations and keywords
+twitter$keywordInd <- !is.na(twitter$keyword)
+twitter$locationIng <- !is.na(twitter$location)
+
+# I didn't use the first few columns (id, keyword, location, text)
+twitter.clean <- twitter[,-c(1:4)]
+twitter.clean$target <- as.factor(twitter.clean$target)
+
+# Subsetting to creating training and testing sets
+twitter.sub <- sample(nrow(twitter), round(0.9*nrow(twitter)))
+twitter.train.use <- twitter.clean[twitter.sub,]
+twitter.train.test <- twitter.clean[-twitter.sub,]
+
+# Random Forest Model
+twitter.rf <- randomForest(target~.,
+                           data=twitter.train.use,
+                           mtry=5,
+                           ntree=800,
+                           importance=TRUE)
+
+# RF plots we did with Heaton, but I forgot what they mean lol
+plot(twitter.rf)
+varImpPlot(twitter.rf)
+
+# Prediction Assessment (I got around .72)
+twitter.train.test$predict <- predict(twitter.rf, newdata=twitter.train.test)
+sum(twitter.train.test$target == twitter.train.test$predict) / nrow(twitter.train.test)
+```
+
+
+
