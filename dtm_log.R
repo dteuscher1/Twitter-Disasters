@@ -165,7 +165,7 @@ twitter$word <- sentiment_df$word_count
 
 # Proportion of capital to lower case letters
 twitter <- twitter %>% mutate("cap.prop" = capital/characters)
-head(twitter)
+
 add.variables <- twitter %>% select(6:15) %>% as.matrix()
 mat.variables <- cbind(dtm_train, add.variables)
 
@@ -179,4 +179,22 @@ glmnet_classifier1 <- cv.glmnet(x = mat.variables, y = twitter$target,
 plot(glmnet_classifier1)
 print(paste("max AUC =", round(max(glmnet_classifier1$cvm), 4)))
 print(paste("max AUC =", round(max(glmnet_classifier$cvm), 4)))
+
+vocab1 <- create_vocabulary(twit_train, ngram = c(1L, 2L))
+vocab1 <- prune_vocabulary(vocab1, term_count_min = 10, 
+                         doc_proportion_max = 0.5)
+bigram_vectorizer <- vocab_vectorizer(vocab1)
+dtm_train <- create_dtm(twit_train, bigram_vectorizer)
+glmnet_classifier2 <- cv.glmnet(x = dtm_train, y = twitter$target, 
+                              family = 'binomial', 
+                              alpha = 1,
+                              type.measure = "auc",
+                              nfolds = 10,
+                              thresh = 1e-3,
+                              maxit = 1e3)
+plot(glmnet_classifier2)
+print(paste("max AUC =", round(max(glmnet_classifier1$cvm), 4)))
+print(paste("max AUC =", round(max(glmnet_classifier$cvm), 4)))
+print(paste("max AUC =", round(max(glmnet_classifier2$cvm), 4)))
+
 #ensenble, try adding our additional variables, removing stop-words, playing with model parameters
