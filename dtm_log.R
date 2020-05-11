@@ -1,6 +1,10 @@
 library(tidyverse)
 library(text2vec)
 library(glmnet)
+library(corpus)
+library(stringr)
+library(sentimentr)
+
 
 twitter <- read_csv('train.csv')
 twitter_test <- read_csv('test.csv')
@@ -35,7 +39,7 @@ t1 <- Sys.time()
 # with test data in vector space - .8532
 # with test data in vector space and additional variables - 0.8532
 
-dtm_train <- create_dtm(twit_train.1, vectorizer) #creating document text matrix
+dtm_train <- create_dtm(twit_train, vectorizer) #creating document text matrix
 print(difftime(Sys.time(), t1, units = "sec"))
 
 t1 <- Sys.time()
@@ -102,5 +106,95 @@ write_csv(as.data.frame(preds.log.out), 'preds.log.out.csv')
 
 preds.log.out <- cbind("id" = twitter_test$id, as.integer(preds.log > 0.45))
 
+
+## Adjustments
+twit_train <- itoken(twitter$text, #<- change to twit.1 if using test data set to create vector space
+                     preprocessor = tolower,
+                     tokenizer = word_tokenizer,
+                     ids = twitter$id,
+                     progressbar = TRUE)
+vocab <- create_vocabulary(twit_train, stopwords = stopwords_en)
+pruned_vocab <- prune_vocabulary(vocab, 
+                                term_count_min = 10, 
+                                doc_proportion_max = 0.5,
+                                doc_proportion_min = 0.001)
+vectorizer <- vocab_vectorizer(pruned_vocab) 
+
+dtm_train  <- create_dtm(twit_train, vectorizer)
+dim(dtm_train)
+glmnet_classifier <- cv.glmnet(x = dtm_train, y = twitter$target, 
+                              family = 'binomial', 
+                              alpha = 1,
+                              type.measure = "auc",
+                              nfolds = 10,
+                              thresh = 1e-3,
+                              maxit = 1e3)
+print(paste("max AUC =", round(max(glmnet_classifier$cvm), 4)))
+
+# Adding additional variables
+#1 Punctuation - .!?,"'-
+twitter$url_count <- str_count(twitter$text, "http(.*)$")
+
+# Removed urls
+twitter$text <- gsub("http(.*)$", "http", twitter$text)
+
+twitter$punct_count <- str_count(twitter$text, "[.!?,\"'-]" )
+
+#2 Handles - @
+twitter$handles_count <- str_count(twitter$text, "[@]" )
+
+#3 Hashtag - #
+twitter$hashtag_count <- str_count(twitter$text, "[#]" )
+
+#4 Length
+twitter$characters <- nchar(twitter$text)
+
+# Capital letter
+twitter$capital <- str_count(twitter$text, "[A-Z]")
+
+# Numbers
+twitter$numbers <- str_count(twitter$text, "[0-9]")
+
+# Tone
+sentiment_df <- sentiment_by(get_sentences(twitter$text))
+
+twitter$tone <- sentiment_df$ave_sentiment
+
+# Word count
+twitter$word <- sentiment_df$word_count
+
+# Proportion of capital to lower case letters
+twitter <- twitter %>% mutate("cap.prop" = capital/characters)
+
+add.variables <- twitter %>% select(6:15) %>% as.matrix()
+mat.variables <- cbind(dtm_train, add.variables)
+
+glmnet_classifier1 <- cv.glmnet(x = mat.variables, y = twitter$target, 
+                               family = 'binomial', 
+                               alpha = 1,
+                               type.measure = "auc",
+                               nfolds = 10,
+                               thresh = 1e-3,
+                               maxit = 1e3)
+plot(glmnet_classifier1)
+print(paste("max AUC =", round(max(glmnet_classifier1$cvm), 4)))
+print(paste("max AUC =", round(max(glmnet_classifier$cvm), 4)))
+
+vocab1 <- create_vocabulary(twit_train, ngram = c(1L, 2L))
+vocab1 <- prune_vocabulary(vocab1, term_count_min = 10, 
+                         doc_proportion_max = 0.5)
+bigram_vectorizer <- vocab_vectorizer(vocab1)
+dtm_train <- create_dtm(twit_train, bigram_vectorizer)
+glmnet_classifier2 <- cv.glmnet(x = dtm_train, y = twitter$target, 
+                              family = 'binomial', 
+                              alpha = 1,
+                              type.measure = "auc",
+                              nfolds = 10,
+                              thresh = 1e-3,
+                              maxit = 1e3)
+plot(glmnet_classifier2)
+print(paste("max AUC =", round(max(glmnet_classifier1$cvm), 4)))
+print(paste("max AUC =", round(max(glmnet_classifier$cvm), 4)))
+print(paste("max AUC =", round(max(glmnet_classifier2$cvm), 4)))
 
 #ensenble, try adding our additional variables, removing stop-words, playing with model parameters

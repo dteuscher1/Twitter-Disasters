@@ -27,3 +27,9 @@ https://israelg99.github.io/2017-03-23-Word2Vec-Explained/
 https://www.rpubs.com/nchung/cunymsds-607_prj-4
 https://cran.r-project.org/web/packages/text2vec/vignettes/text-vectorization.html#tf-idf
 https://cran.r-project.org/web/packages/superml/vignettes/Guide-to-TfidfVectorizer.html
+
+# Ensemble Model
+https://www.analyticsvidhya.com/blog/2017/02/introduction-to-ensembling-along-with-implementation-in-r/
+https://cran.r-project.org/web/packages/caretEnsemble/vignettes/caretEnsemble-intro.html
+https://rpubs.com/zxs107020/370699
+https://towardsdatascience.com/a-comprehensive-machine-learning-workflow-with-multiple-modelling-using-caret-and-caretensemble-in-fcbf6d80b5f2
