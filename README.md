@@ -1,8 +1,5 @@
 # nlp-twitter-disaster
 
-This is David.
-
-
 # References
 
 ## Kaggle User Approaches
@@ -12,15 +9,14 @@ https://www.kaggle.com/fnguyen/a-tidytext-approach-to-nlp-modeling-for-beginners
 ## Learning Caret Package
 http://topepo.github.io/caret/index.html
 
-# Text Mining with R
+## Text Mining with R
 https://www.tidytextmining.com/
-#Chapter specifically about inverse document frequency
+### Chapter specifically about inverse document frequency
 https://www.tidytextmining.com/tfidf.html
 
 
 
-# Another good document going through some NLP stuff in R
-## Word2vec algorithm
+## Word2vec Algorithm
 https://israelg99.github.io/2017-03-23-Word2Vec-Explained/
 
 ## Other
@@ -28,7 +24,8 @@ https://www.rpubs.com/nchung/cunymsds-607_prj-4
 https://cran.r-project.org/web/packages/text2vec/vignettes/text-vectorization.html#tf-idf
 https://cran.r-project.org/web/packages/superml/vignettes/Guide-to-TfidfVectorizer.html
 
-# Ensemble Model
+## Ensemble Model
+https://www.analyticsvidhya.com/blog/2018/06/comprehensive-guide-for-ensemble-models/
 https://www.analyticsvidhya.com/blog/2017/02/introduction-to-ensembling-along-with-implementation-in-r/
 https://cran.r-project.org/web/packages/caretEnsemble/vignettes/caretEnsemble-intro.html
 https://rpubs.com/zxs107020/370699
