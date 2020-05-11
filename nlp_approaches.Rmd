@@ -7,6 +7,9 @@ output: html_document
 TO DO:
 * Use custom features and tdf for classification
 * Create ensemble for multiple methods
+** Create bagging ensemble ()
+** See https://www.analyticsvidhya.com/blog/2018/06/comprehensive-guide-for-ensemble-models/
+
 -->
 
 ```{r setup, include=FALSE}
