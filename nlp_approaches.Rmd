@@ -21,6 +21,7 @@ knitr::opts_chunk$set(echo = TRUE)
 library(stringr)
 library(sentimentr)
 library(tidyverse)
+library(tidytext)
 library(caret)
 library(text2vec)
 library(glmnet)
@@ -101,10 +102,14 @@ twit.1 <- tibble(id = c(twitter$id, twitter_test$id),
                  text = c(twitter$text, twitter_test$text))
 
 twit_train <- text2vec_iterator(twit.1)
-vocab <- create_vocabulary(twit_train)
+vocab <- create_vocabulary(twit_train, stopwords = stop_words$word)
+pruned_vocab <- prune_vocabulary(vocab, 
+                                term_count_min = 10, 
+                                doc_proportion_max = 0.5,
+                                doc_proportion_min = 0.001)
 
 # Create vector space for given vocabulary set
-vectorizer <- vocab_vectorizer(vocab)
+vectorizer <- vocab_vectorizer(pruned_vocab)
 
 # Create document-term matrix for training data
 twit_train <- text2vec_iterator(twitter)
@@ -131,164 +136,68 @@ allvars_test <- twitter_test %>%
 # Modeling
 
 ## Logistic Regression
-<!--This is as far as I have gotten so far with merging files (Skyler)-->
+
+### Cross-validation
 
 ```{r}
-glmnet.classifier.log <- cv.glmnet(x = dtm_train,
-                                   y = as.factor(twitter$target),
-                                   family = "binomial",
-                                   alpha = 1, 
-                                   type.measure = "auc",
-                                   nfolds = 4, 
-                                   thresh = 1e-3,
-                                   maxit = 1e3)
-plot(glmnet.classifier.log)
-print(paste("max AUC =", round(max(glmnet.classifier.log$cvm), 4)))
-
-twit_test <- twitter_test$text %>% prep_fun %>% tok_fun %>% itoken(., ids = twitter_test$id)
-dtm_test <- create_dtm(twit_test, vectorizer)
-
-# preds.log.2 <- predict(glmnet.classifier.log, dtm_test, type = "class")[,1]
-preds.log <- predict(glmnet.classifier.log, dtm_test, type = "response")[,1]
-
-preds.log.out2 <- cbind("id" = twitter_test$id, as.integer(preds.log > 0.45))
-write_csv(as.data.frame(preds.log.out2), 'preds.log.out2.csv')
-
-
-#cross validation
+#Note: cross-validation assessed on only document-term matrix
 set.seed(2020)
 test.set <- sample( 1:nrow(twitter), 0.1*nrow(twitter))
 twit.train <- twitter[-test.set,]
 twit.test <- twitter[test.set,]
 
-cv_train <- itoken(twit.train$text,
-                     preprocessor = tolower,
-                     tokenizer = word_tokenizer,
-                     ids = twit.train$id,
-                     progressbar = TRUE)
-vocab <- create_vocabulary(cv_train)
-vectorizer <- vocab_vectorizer(vocab) 
-dtm_train <- create_dtm(cv_train, vectorizer) #creating document text matrix
+cv_train <- text2vec_iterator(twit.train)
+cv_vocab <- create_vocabulary(cv_train)
+cv_vectorizer <- vocab_vectorizer(cv_vocab)
+
+# Create document-term matrix for training data
+dtm_train <- create_dtm(cv_train, cv_vectorizer)
+
+# Create document-term matrix for test data
+cv_test <- text2vec_iterator(twit.test)
+dtm_test <- create_dtm(cv_test, cv_vectorizer)
+
 glmnet.classifier.cv <- cv.glmnet(x = dtm_train,
                                    y = as.factor(twit.train$target),
                                    family = "binomial",
                                    alpha = 1, 
                                    type.measure = "auc",
-                                   nfolds = 4, 
+                                   nfolds = 10, 
                                    thresh = 1e-3,
                                    maxit = 1e3)
-cv_test <- twit.test$text %>% prep_fun %>% tok_fun %>% itoken(., ids = twit.test$id)
-dtm_test <- create_dtm(cv_test, vectorizer)
 
-cv.perc <- c()
-for (i in seq(.3, .7, by = 0.01)) {
-  print(i)
-  cv.perc <- append(cv.perc, mean((as.integer(as.numeric(predict(glmnet.classifier.cv, dtm_test, type = "response")[,1]) > i))  == twit.test$target))
-  
-}
-seq(.3, .7, by = 0.01)[which.max(cv.perc)]
+cutoffs <- seq(.3, .7, by=0.01)
+cv.perc <- sapply(cutoffs, function(cutoff) {
+    y_hat <- predict(glmnet.classifier.cv, dtm_test, type="response")[,1] > cutoff
+    mean(y_hat == twit.test$target)
+  })
+cv_cutoff <- cutoffs[which.max(cv.perc)]
+paste('Best cutoff proportion:', cv_cutoff)
+```
 
+### Prediction
 
-mean(preds.log.out[,2] == submission_word2vec[,2])
-write_csv(as.data.frame(preds.log.out), 'preds.log.out.csv')
+```{r}
+glmnet.classifier.log <- cv.glmnet(x = allvars_train,
+                                   y = as.factor(twitter$target),
+                                   family = "binomial",
+                                   alpha = 1, 
+                                   type.measure = "auc",
+                                   nfolds = 10, 
+                                   thresh = 1e-3,
+                                   maxit = 1e3)
+plot(glmnet.classifier.log)
+print(paste("max AUC =", round(max(glmnet.classifier.log$cvm), 4)))
 
-
-
-preds.log.out <- cbind("id" = twitter_test$id, as.integer(preds.log > 0.45))
-
-
-## Adjustments
-twit_train <- itoken(twitter$text, #<- change to twit.1 if using test data set to create vector space
-                     preprocessor = tolower,
-                     tokenizer = word_tokenizer,
-                     ids = twitter$id,
-                     progressbar = TRUE)
-vocab <- create_vocabulary(twit_train, stopwords = stopwords_en)
-pruned_vocab <- prune_vocabulary(vocab, 
-                                term_count_min = 10, 
-                                doc_proportion_max = 0.5,
-                                doc_proportion_min = 0.001)
-vectorizer <- vocab_vectorizer(pruned_vocab) 
-
-dtm_train  <- create_dtm(twit_train, vectorizer)
-dim(dtm_train)
-glmnet_classifier <- cv.glmnet(x = dtm_train, y = twitter$target, 
-                              family = 'binomial', 
-                              alpha = 1,
-                              type.measure = "auc",
-                              nfolds = 10,
-                              thresh = 1e-3,
-                              maxit = 1e3)
-print(paste("max AUC =", round(max(glmnet_classifier$cvm), 4)))
-
-# Adding additional variables
-#1 Punctuation - .!?,"'-
-twitter$url_count <- str_count(twitter$text, "http(.*)$")
-
-# Removed urls
-twitter$text <- gsub("http(.*)$", "http", twitter$text)
-
-twitter$punct_count <- str_count(twitter$text, "[.!?,\"'-]" )
-
-#2 Handles - @
-twitter$handles_count <- str_count(twitter$text, "[@]" )
-
-#3 Hashtag - #
-twitter$hashtag_count <- str_count(twitter$text, "[#]" )
-
-#4 Length
-twitter$characters <- nchar(twitter$text)
-
-# Capital letter
-twitter$capital <- str_count(twitter$text, "[A-Z]")
-
-# Numbers
-twitter$numbers <- str_count(twitter$text, "[0-9]")
-
-# Tone
-sentiment_df <- sentiment_by(get_sentences(twitter$text))
-
-twitter$tone <- sentiment_df$ave_sentiment
-
-# Word count
-twitter$word <- sentiment_df$word_count
-
-# Proportion of capital to lower case letters
-twitter <- twitter %>% mutate("cap.prop" = capital/characters)
-
-add.variables <- twitter %>% select(6:15) %>% as.matrix()
-mat.variables <- cbind(dtm_train, add.variables)
-
-glmnet_classifier1 <- cv.glmnet(x = mat.variables, y = twitter$target, 
-                               family = 'binomial', 
-                               alpha = 1,
-                               type.measure = "auc",
-                               nfolds = 10,
-                               thresh = 1e-3,
-                               maxit = 1e3)
-plot(glmnet_classifier1)
-print(paste("max AUC =", round(max(glmnet_classifier1$cvm), 4)))
-print(paste("max AUC =", round(max(glmnet_classifier$cvm), 4)))
-
-vocab1 <- create_vocabulary(twit_train, ngram = c(1L, 2L))
-vocab1 <- prune_vocabulary(vocab1, term_count_min = 10, 
-                         doc_proportion_max = 0.5)
-bigram_vectorizer <- vocab_vectorizer(vocab1)
-dtm_train <- create_dtm(twit_train, bigram_vectorizer)
-glmnet_classifier2 <- cv.glmnet(x = dtm_train, y = twitter$target, 
-                              family = 'binomial', 
-                              alpha = 1,
-                              type.measure = "auc",
-                              nfolds = 10,
-                              thresh = 1e-3,
-                              maxit = 1e3)
-plot(glmnet_classifier2)
-print(paste("max AUC =", round(max(glmnet_classifier1$cvm), 4)))
-print(paste("max AUC =", round(max(glmnet_classifier$cvm), 4)))
-print(paste("max AUC =", round(max(glmnet_classifier2$cvm), 4)))
+# Prediction
+preds.log <- predict(glmnet.classifier.log, allvars_test,
+                     type="response")[,1]
+preds.log.out <- tibble(id=twitter_test$id, target=as.integer(preds.log > cv_cutoff))
+write_csv(preds.log.out, 'preds_log_out.csv')
 ```
 
 # Support Vector Machine
+<!--This is as far as I have gotten so far with merging files (Skyler)-->
 <!--NEED TO VERIFY IT WORKS AND PERFORMANCE-->
 
 ```{r}
