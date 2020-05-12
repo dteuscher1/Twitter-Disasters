@@ -5,12 +5,11 @@ output: html_document
 
 <!--
 TO DO:
-* Use custom features and tdf for classification
 * Create ensemble for multiple methods
 ** Create bagging ensemble (one model at a time)
 ** See https://www.analyticsvidhya.com/blog/2018/06/comprehensive-guide-for-ensemble-models/
-* TDF: remove stop-words
 * Play with model parameters
+* Normalize variables
 -->
 
 ```{r setup, include=FALSE}
@@ -137,7 +136,7 @@ allvars_test <- twitter_test %>%
 
 ## Logistic Regression
 
-### Cross-validation
+### Cross-validation to Find Best Classification Threshold Value
 
 ```{r}
 #Note: cross-validation assessed on only document-term matrix
@@ -171,6 +170,7 @@ cv.perc <- sapply(cutoffs, function(cutoff) {
     y_hat <- predict(glmnet.classifier.cv, dtm_test, type="response")[,1] > cutoff
     mean(y_hat == twit.test$target)
   })
+
 cv_cutoff <- cutoffs[which.max(cv.perc)]
 paste('Best cutoff proportion:', cv_cutoff)
 ```
@@ -197,7 +197,6 @@ write_csv(preds.log.out, 'preds_log_out.csv')
 ```
 
 # Support Vector Machine
-<!--This is as far as I have gotten so far with merging files (Skyler)-->
 <!--NEED TO VERIFY IT WORKS AND PERFORMANCE-->
 
 ```{r}
@@ -222,19 +221,10 @@ svmFit
 ```
 
 # Naive Bayes
-<!--NEED TO VERIFY IT WORKS AND PERFORMANCE-->
 
 ```{r}
-# Add indicator variables for keyword and location
-twitter1 <- twitter %>%
-  mutate(target = factor(ifelse(target == 1, "Yes", "No"), levels = c("No", "Yes")),
-         keyword_ind = ifelse(is.na(keyword), 0, 1),
-         location_ind = ifelse(is.na(location), 0, 1))
-
-# Create data frame of predictor variables
-x <- twitter1 %>% select(-id, -text, -target, -keyword, -location) %>% as.data.frame()
 # Create vector of the response variable
-y <- twitter1$target
+y <- factor(ifelse(twitter$target == 1, "Yes", "No"))
 
 # Specifies the type of cross validation and to return AUC, sensitivity, and specificity
 myControl <- trainControl(
@@ -245,11 +235,11 @@ myControl <- trainControl(
 )
 
 # Creates a grid to test different values of hyperparameters
-grid <- expand.grid(laplace=seq(0,10, length = 5), usekernel=c(TRUE,FALSE), adjust=seq(1,10, length = 5))
+grid <- expand.grid(laplace=0, usekernel=TRUE, adjust=1)
 
 # Fit of the Naive Bayes model
 nb.model <- train(
-  x=x,
+  x=as.matrix(allvars_train),
   y=y,
   method = "naive_bayes",
   trControl = myControl,
@@ -262,6 +252,13 @@ summary(nb.model)
 
 # Show a plot comparing the models with different hyperparameter values
 plot(nb.model)
+
+# Best ROC: Laplace 0, Bandwidth 1, usekernel TRUE
+preds.nb <- predict(nb.model, as.matrix(allvars_test))
+preds.nb <- as.numeric( as.character(preds.nb)=='Yes')
+
+preds.nb.out <- tibble(id=twitter_test$id, target=preds.nb)
+write_csv(preds.nb.out, 'preds_nb_out.csv')
 ```
 
 # Random Forest
