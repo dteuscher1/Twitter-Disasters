@@ -24,6 +24,7 @@ library(tidytext)
 library(caret)
 library(text2vec)
 library(glmnet)
+library(randomForest)
 ```
 
 # Preprocessing
@@ -192,32 +193,9 @@ print(paste("max AUC =", round(max(glmnet.classifier.log$cvm), 4)))
 # Prediction
 preds.log <- predict(glmnet.classifier.log, allvars_test,
                      type="response")[,1]
-preds.log.out <- tibble(id=twitter_test$id, target=as.integer(preds.log > cv_cutoff))
+preds.log <- as.integer(preds.log > cv_cutoff)
+preds.log.out <- tibble(id=twitter_test$id, target=preds.log)
 write_csv(preds.log.out, 'preds_log_out.csv')
-```
-
-# Support Vector Machine
-<!--NEED TO VERIFY IT WORKS AND PERFORMANCE-->
-
-```{r}
-# filling missing values
-twitter$keyword[is.na(twitter$keyword)] <- "None"
-twitter$location[is.na(twitter$location)] <- "None"
-
-# Making the target variable a factor
-twitter %>% mutate(target = if_else(target=='1', 'Y', 'N'))
-
-# Re-ordering columns. Unsure if necessary
-twitter <- twitter[, c(1:4, 6:12, 5)]
-
-svmFit <- train(target ~ . -id -text, 
-                data = twitter, 
-                method = "svmRadial", 
-                trControl = fitControl, 
-                preProc = c("center", "scale"),
-                tuneLength = 4,
-                metric = "ROC")
-svmFit 
 ```
 
 # Naive Bayes
@@ -228,8 +206,7 @@ y <- factor(ifelse(twitter$target == 1, "Yes", "No"))
 
 # Specifies the type of cross validation and to return AUC, sensitivity, and specificity
 myControl <- trainControl(
-  method="cv",
-  number = 5,
+  method="none",
   classProbs = TRUE,
   summaryFunction = twoClassSummary
 )
@@ -247,11 +224,7 @@ nb.model <- train(
   metric="ROC"
 )
 
-nb.model
 summary(nb.model)
-
-# Show a plot comparing the models with different hyperparameter values
-plot(nb.model)
 
 # Best ROC: Laplace 0, Bandwidth 1, usekernel TRUE
 preds.nb <- predict(nb.model, as.matrix(allvars_test))
@@ -262,37 +235,68 @@ write_csv(preds.nb.out, 'preds_nb_out.csv')
 ```
 
 # Random Forest
-<!--NEED TO VERIFY IT WORKS AND PERFORMANCE-->
 
 ```{r}
-library(randomForest)
-
-# Indicator for non-NA locations and keywords
-twitter$keywordInd <- !is.na(twitter$keyword)
-twitter$locationIng <- !is.na(twitter$location)
-
-# I didn't use the first few columns (id, keyword, location, text)
-twitter.clean <- twitter[,-c(1:4)]
-twitter.clean$target <- as.factor(twitter.clean$target)
-
-# Subsetting to creating training and testing sets
-twitter.sub <- sample(nrow(twitter), round(0.9*nrow(twitter)))
-twitter.train.use <- twitter.clean[twitter.sub,]
-twitter.train.test <- twitter.clean[-twitter.sub,]
-
 # Random Forest Model
-twitter.rf <- randomForest(target~.,
-                           data=twitter.train.use,
+twitter.rf <- randomForest(x=as.matrix(allvars_train),
+                           y=as.factor(twitter$target),
                            mtry=5,
-                           ntree=800,
+                           ntree=5,
                            importance=TRUE)
 
 # RF plots we did with Heaton, but I forgot what they mean lol
 plot(twitter.rf)
 varImpPlot(twitter.rf)
 
-# Prediction Assessment (I got around .72)
-twitter.train.test$predict <- predict(twitter.rf, newdata=twitter.train.test)
-sum(twitter.train.test$target == twitter.train.test$predict) / nrow(twitter.train.test)
+preds.rf <- predict(twitter.rf, newdata=as.matrix(allvars_test))
+preds.rf.out <- tibble(id=twitter_test$id, target=preds.rf)
+write_csv(preds.rf.out, 'preds_rf_out.csv')
+```
+
+## Support Vector Machine
+<!--NEED TO VERIFY IT WORKS AND PERFORMANCE-->
+
+```{r}
+# Making the target variable a factor
+twitter %>% mutate(target = if_else(target=='1', 'Y', 'N'))
+
+# Re-ordering columns. Unsure if necessary
+twitter <- twitter[, c(1:4, 6:12, 5)]
+
+svmFit <- train(x=allvars_train,
+                y=twitter$target,
+                data = twitter, 
+                method = "svmRadial", 
+                trControl = fitControl, 
+                preProc = c("center", "scale"),
+                tuneLength = 4,
+                metric = "ROC")
+svmFit 
+```
+
+## Principal Component Analysis (PCA)
+
+The code below may be used to reduce the number of variables in both the train and test sets. The resulting transformation was recently tested on the training dataset with 1500+ variables, and the reduced dimensionality was n x 967. However, classification accuracy for regularized logistic regression was 4 percent points lower than classification without dimensionality reduction. Regardless, this may be useful for speeding up computation for SVM.
+
+```{r}
+pr.out <- prcomp(allvars_train, scale=TRUE)
+pr.var <- pr.out$sdev ^2
+pve <- pr.var/sum(pr.var)
+
+plot(pve, xlab="Principal Component", 
+     ylab="Proportion of Variance Explained", 
+     type='b')
+plot(cumsum(pve), xlab="Principal Component", 
+     ylab="Cumulative Proportion of Variance Explained ",
+     ylim=c(0,1), type='b')
+
+# Find a reduced number of variables that still explain 90% of the variance in the data 
+var_explained <- .9
+ncomp <- sum(cumsum(pve) < var_explained) + 1
+pca_matrix <- pr.out$rotation[,1:ncomp]
+
+# Reduce number of variables of datasets to simplify computation and potentially reduce overfitting
+# allvars_train <- allvars_train %*% pca_matrix
+# allvars_test <- allvars_test %*% pca_matrix
 ```
 
