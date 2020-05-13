@@ -198,7 +198,7 @@ preds.log.out <- tibble(id=twitter_test$id, target=preds.log)
 write_csv(preds.log.out, 'preds_log_out.csv')
 ```
 
-# Naive Bayes
+## Naive Bayes
 
 ```{r}
 # Create vector of the response variable
@@ -234,7 +234,7 @@ preds.nb.out <- tibble(id=twitter_test$id, target=preds.nb)
 write_csv(preds.nb.out, 'preds_nb_out.csv')
 ```
 
-# Random Forest
+## Random Forest
 
 ```{r}
 # Random Forest Model
@@ -254,22 +254,25 @@ write_csv(preds.rf.out, 'preds_rf_out.csv')
 ```
 
 ## Support Vector Machine
-<!--NEED TO VERIFY IT WORKS AND PERFORMANCE-->
+<!--TAKES TOO LONG TO COMPUTE FOREGOING FOR NOW-->
 
 ```{r}
-# Making the target variable a factor
-twitter %>% mutate(target = if_else(target=='1', 'Y', 'N'))
+# Create vector of the response variable
+y <- factor(ifelse(twitter$target == 1, "Yes", "No"))
 
-# Re-ordering columns. Unsure if necessary
-twitter <- twitter[, c(1:4, 6:12, 5)]
+fitControl <- trainControl(method = "none",
+                           #number = 10,
+                           classProbs = TRUE,
+                           summaryFunction = twoClassSummary)
 
-svmFit <- train(x=allvars_train,
-                y=twitter$target,
+svmFit <- train(x=as.matrix(allvars_train),
+                y=y,
                 data = twitter, 
                 method = "svmRadial", 
-                trControl = fitControl, 
+                trControl = fitControl,
+                sigma=1,
+                tau=1,
                 preProc = c("center", "scale"),
-                tuneLength = 4,
                 metric = "ROC")
 svmFit 
 ```
@@ -300,3 +303,11 @@ pca_matrix <- pr.out$rotation[,1:ncomp]
 # allvars_test <- allvars_test %*% pca_matrix
 ```
 
+# Ensemble
+
+## Stacked Ensemble
+
+Ensemble Layout:
+- SVM
+- Naive Bayes
+- Regularized Logistic Regression
