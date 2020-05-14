@@ -193,6 +193,10 @@ print(paste("max AUC =", round(max(glmnet.classifier.log$cvm), 4)))
 # Prediction
 preds.log <- predict(glmnet.classifier.log, allvars_test,
                      type="response")[,1]
+
+#probability for voting ensemble
+prob.log <- predict(glmnet.classifier.log, allvars_test, type="response")[,1]
+
 preds.log <- as.integer(preds.log > cv_cutoff)
 preds.log.out <- tibble(id=twitter_test$id, target=preds.log)
 write_csv(preds.log.out, 'preds_log_out.csv')
@@ -226,6 +230,9 @@ nb.model <- train(
 
 summary(nb.model)
 
+# Voting Ensemble probs
+prob.nb <- predict(nb.model, as.matrix(allvars_test), type='prob')[,2]
+
 # Best ROC: Laplace 0, Bandwidth 1, usekernel TRUE
 preds.nb <- predict(nb.model, as.matrix(allvars_test))
 preds.nb <- as.numeric( as.character(preds.nb)=='Yes')
@@ -247,6 +254,9 @@ twitter.rf <- randomForest(x=as.matrix(allvars_train),
 # RF plots we did with Heaton, but I forgot what they mean lol
 plot(twitter.rf)
 varImpPlot(twitter.rf)
+
+# Voting ensemble proportions
+prob.rf <- predict(twitter.rf, newdata=as.matrix(allvars_test), type='prob')[,2]
 
 preds.rf <- predict(twitter.rf, newdata=as.matrix(allvars_test))
 preds.rf.out <- tibble(id=twitter_test$id, target=preds.rf)
@@ -308,6 +318,20 @@ pca_matrix <- pr.out$rotation[,1:ncomp]
 ## Stacked Ensemble
 
 Ensemble Layout:
-- SVM
 - Naive Bayes
+- Random Forest
 - Regularized Logistic Regression
+
+## Weighted Voting Ensemble
+
+Layout:
+- 2 * Regularized Logistic Regression
+- 1 * Random Forest
+- 0 * Naive Bayes
+
+```{r}
+combined.prob <- (2*prob.log + prob.rf)/3
+combined.out <- tibble(id=twitter_test$id, target=as.numeric(combined.prob > .5))
+write_csv(combined.out, 'combined_out.csv')
+```
+
