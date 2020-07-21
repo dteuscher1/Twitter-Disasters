@@ -3,20 +3,11 @@ title: "Disaster Tweets: NLP Approaches"
 output: html_document
 ---
 
-<!--
-TO DO:
-* Create ensemble for multiple methods
-** Create bagging ensemble (one model at a time)
-** See https://www.analyticsvidhya.com/blog/2018/06/comprehensive-guide-for-ensemble-models/
-* Play with model parameters
-* Normalize variables
--->
-
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-```{r}
+```{r, message=FALSE, warning=FALSE}
 library(stringr)
 library(sentimentr)
 library(tidyverse)
@@ -25,17 +16,25 @@ library(caret)
 library(text2vec)
 library(glmnet)
 library(randomForest)
+library(scales)
+library(DataExplorer)
 ```
 
-```{r}
-library(tidytext)
-library(readr)
-library(dplyr)
-library(ggplot2)
-library(tidyr)
-library(scales)
+# Exploratory Data Analysis
 
-twitter <- read_csv('train.csv')
+The plots below show the percentage of missing values for each variable in the training set and the test set. The proportion of missing values is practically the same between the training and test set. There are a lot of tweets that don't have a location at all and almost all of the tweets have keywords. 
+```{r, message=FALSE, warning=FALSE}
+# Read in training data
+twitter <- read_csv("train.csv")
+twitter_test <- read_csv('test.csv')
+
+plot_missing(twitter)
+plot_missing(twitter_test)
+```
+
+
+The plot below shows which words tend to be in disaster tweets more often and which words tend to be in non-disaster tweets more often. 
+```{r, message=FALSE, warning=FALSE}
 tidy_twit <- twitter %>%
   mutate(text = gsub("http(.*)", "http", text)) %>%
   unnest_tokens(word, text) %>%
@@ -66,7 +65,7 @@ ggplot(frequency, aes(x = `0`, y = `1`, color = abs(`1` - `0`))) +
 
 ## Feature Engineering
 
-To begin with, we created variables to represent any useful patterns found within texts that may indicate whether a given tweet is about a real disaster.
+We created variables to represent any useful patterns found within texts that may indicate whether a given tweet is about a real disaster. Specifically, we counted the number of urls in the tweet, counted the number of punctuation marks, the number of `@`, the number of hashtags, the length of the tweet, the number of capital letters and the proportion of capital letters out of total characters, the amount of numbers included in the tweets, the number of words in the tweets, and the average sentiment for each tweet. 
 
 ```{r}
 custom_features <- function(twitter) {
@@ -100,17 +99,14 @@ custom_features <- function(twitter) {
 }
 ```
 
+The function created to calculate features from the tweets was used on the training and test sets. 
 ```{r, message=FALSE}
-# Read in training data
-twitter <- read_csv("train.csv")
-twitter_test <- read_csv('test.csv')
-
 twitter <- custom_features(twitter)
 twitter_test <- custom_features(twitter_test)
 ```
 
 ## Converting Text to Usable Predictors (Term Document Frequency)
-
+ This function creates an iterator that can be used to create a vocabulary, which is needed to get a term document matrix 
 ```{r}
 text2vec_iterator <- function(twitter) {
   # Args:
@@ -129,6 +125,10 @@ text2vec_iterator <- function(twitter) {
 }
 ```
 
+
+The text from the training and test set is used to create a vector space with more words than if we only used the training set. Word vectors generally improve with more data, so we included both when creating the word vector. Since we aren't fitting a model, this is beneficial to use because the corpus is larger and the word vector can be better placed in the vector space.
+
+While the vocabulary is built and pruned using the training and test set, the document term matrix is created separately, one for the training set and one for the test set.
 ```{r}
 set.seed(2020)
 
@@ -157,6 +157,7 @@ dtm_test <- create_dtm(twit_test, vectorizer)
 
 ## Combine Custom and Term-Document-Frequency Variables
 
+The document term matrix is combined with the custom variables that were calculated by the `custom_features()` function. 
 ```{r}
 allvars_train <- twitter %>%
   select(-c(id:target)) %>%
@@ -169,6 +170,8 @@ allvars_test <- twitter_test %>%
 ```
 
 # Modeling
+
+A number of different models were attempted to find the best model. A few of these attempts are shown here below.  
 
 ## Logistic Regression
 
