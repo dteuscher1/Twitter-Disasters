@@ -32,6 +32,16 @@ plot_missing(twitter)
 plot_missing(twitter_test)
 ```
 
+The plot below shows that more of the tweets are not about real disasters in the training set. 
+```{r}
+ggplot(twitter, aes(x = as.factor(target))) + 
+  geom_bar(fill = "skyblue") +
+  labs(x = "Disaster", y = "Count") +
+  scale_x_discrete(labels = c("No", "Yes")) +
+  coord_flip() +
+  theme_bw()
+```
+
 
 The plot below shows which words tend to be in disaster tweets more often and which words tend to be in non-disaster tweets more often. 
 ```{r, message=FALSE, warning=FALSE}
@@ -103,6 +113,24 @@ The function created to calculate features from the tweets was used on the train
 ```{r, message=FALSE}
 twitter <- custom_features(twitter)
 twitter_test <- custom_features(twitter_test)
+```
+
+The tone of the tweets is on average slightly negative, which makes sense since disasters are a negative event and the words that are frequently associated with a disaster (whether real or not) have a negative connotation. 
+```{r, message=FALSE}
+ggplot(twitter, aes(x = tone)) +
+  geom_histogram(fill = "firebrick", bins = 15) +
+  geom_vline(xintercept = median(twitter$tone), color = "black") +
+  theme_bw()
+
+```
+
+It appears that tweets that are about real disasters have more characters than tweets that are not about disasters, which isn't surprising since most tweets about actual disasters try to provide as much information as possible. 
+```{r}
+ggplot(twitter, aes(x = as.factor(target), y = char_count)) + 
+  geom_boxplot(alpha = .3) +
+  geom_jitter(alpha = .2, color = "steelblue") +
+  labs(x = "Disaster", y = "Character Count") +
+  scale_x_discrete(labels = c("No", "Yes"))
 ```
 
 ## Converting Text to Usable Predictors (Term Document Frequency)
@@ -177,6 +205,8 @@ A number of different models were attempted to find the best model. A few of the
 
 ### Cross-validation to Find Best Classification Threshold Value
 
+A logistic regression model with an L1 penalty was fit with a 10 fold cross validation. Multiple different cutoffs were used to determine what cutoff value minimized the misclassification rate since the competition is focused on the accuracy of the model. There may be an improvement in the model performance if the mean F-score was calculated instead. 
+
 ```{r}
 #Note: cross-validation assessed on only document-term matrix
 set.seed(2020)
@@ -216,6 +246,8 @@ paste('Best cutoff proportion:', cv_cutoff)
 
 ### Prediction
 
+The predictions for the logistic regression model are obtained here. The probabilities are extracted and then the classification is determined by the cutoff value that was previously determined. 
+
 ```{r}
 glmnet.classifier.log <- cv.glmnet(x = allvars_train,
                                    y = as.factor(twitter$target),
@@ -242,6 +274,8 @@ write_csv(preds.log.out, 'preds_log_out.csv')
 
 ## Naive Bayes
 
+The Naive Bayes model did the worst out of all of the models that were attempted and wasn't used at all. 
+
 ```{r}
 # Create vector of the response variable
 y <- factor(ifelse(twitter$target == 1, "Yes", "No"))
@@ -266,8 +300,6 @@ nb.model <- train(
   metric="ROC"
 )
 
-summary(nb.model)
-
 # Voting Ensemble probs
 prob.nb <- predict(nb.model, as.matrix(allvars_test), type='prob')[,2]
 
@@ -276,10 +308,12 @@ preds.nb <- predict(nb.model, as.matrix(allvars_test))
 preds.nb <- as.numeric( as.character(preds.nb)=='Yes')
 
 preds.nb.out <- tibble(id=twitter_test$id, target=preds.nb)
-write_csv(preds.nb.out, 'preds_nb_out.csv')
+#write_csv(preds.nb.out, 'preds_nb_out.csv')
 ```
 
 ## Random Forest
+
+The random forest model was okay, but could be improved as well. There wasn't a lot of effort that went into tuning the model. 
 
 ```{r}
 # Random Forest Model
@@ -289,76 +323,18 @@ twitter.rf <- randomForest(x=as.matrix(allvars_train),
                            ntree=5,
                            importance=TRUE)
 
-# RF plots we did with Heaton, but I forgot what they mean lol
-plot(twitter.rf)
-varImpPlot(twitter.rf)
-
 # Voting ensemble proportions
 prob.rf <- predict(twitter.rf, newdata=as.matrix(allvars_test), type='prob')[,2]
 
 preds.rf <- predict(twitter.rf, newdata=as.matrix(allvars_test))
 preds.rf.out <- tibble(id=twitter_test$id, target=preds.rf)
-write_csv(preds.rf.out, 'preds_rf_out.csv')
+#write_csv(preds.rf.out, 'preds_rf_out.csv')
 ```
 
-## Support Vector Machine
-<!--TAKES TOO LONG TO COMPUTE FOREGOING FOR NOW-->
-
-```{r}
-# Create vector of the response variable
-y <- factor(ifelse(twitter$target == 1, "Yes", "No"))
-
-fitControl <- trainControl(method = "none",
-                           #number = 10,
-                           classProbs = TRUE,
-                           summaryFunction = twoClassSummary)
-
-svmFit <- train(x=as.matrix(allvars_train),
-                y=y,
-                data = twitter, 
-                method = "svmRadial", 
-                trControl = fitControl,
-                sigma=1,
-                tau=1,
-                preProc = c("center", "scale"),
-                metric = "ROC")
-svmFit 
-```
-
-## Principal Component Analysis (PCA)
-
-The code below may be used to reduce the number of variables in both the train and test sets. The resulting transformation was recently tested on the training dataset with 1500+ variables, and the reduced dimensionality was n x 967. However, classification accuracy for regularized logistic regression was 4 percent points lower than classification without dimensionality reduction. Regardless, this may be useful for speeding up computation for SVM.
-
-```{r}
-pr.out <- prcomp(allvars_train, scale=TRUE)
-pr.var <- pr.out$sdev ^2
-pve <- pr.var/sum(pr.var)
-
-plot(pve, xlab="Principal Component", 
-     ylab="Proportion of Variance Explained", 
-     type='b')
-plot(cumsum(pve), xlab="Principal Component", 
-     ylab="Cumulative Proportion of Variance Explained ",
-     ylim=c(0,1), type='b')
-
-# Find a reduced number of variables that still explain 90% of the variance in the data 
-var_explained <- .9
-ncomp <- sum(cumsum(pve) < var_explained) + 1
-pca_matrix <- pr.out$rotation[,1:ncomp]
-
-# Reduce number of variables of datasets to simplify computation and potentially reduce overfitting
-# allvars_train <- allvars_train %*% pca_matrix
-# allvars_test <- allvars_test %*% pca_matrix
-```
 
 # Ensemble
 
-## Stacked Ensemble
-
-Ensemble Layout:
-- Naive Bayes
-- Random Forest
-- Regularized Logistic Regression
+An ensemble model was used to see if predictions would improve where we used a weighting voting ensemble. We initially wanted to use three models, but the Naive Bayes model performed poorly and the decision was made to only use the logistic regression and the random forest. The ensemble did worse than the logistic regression model by itself and it is likely because there were only 2 models that were included in the ensemble. 
 
 ## Weighted Voting Ensemble
 
@@ -370,6 +346,11 @@ Layout:
 ```{r}
 combined.prob <- (2*prob.log + prob.rf)/3
 combined.out <- tibble(id=twitter_test$id, target=as.numeric(combined.prob > .5))
-write_csv(combined.out, 'combined_out.csv')
+#write_csv(combined.out, 'combined_out.csv')
 ```
+
+
+# Conclusion
+
+The best model, the logistic regression model with a L1 penalizer, gave a mean F-1 score of .79650, which is approximately the 51st percentile of the competition. There are a number of things that can be improved in my opinion. First, I think some of the models can be tuned and then other models, such as gbm and xgboost models could be attempted. Second, with improved models, an ensemble is likely to be better than the current one that is based on two models only. Third, I think that more experience and research with NLP techniques and algorithms would help us to improve the approach to his problem. This is the first exposure I have had with NLP, so I still have a number of things to learn in order to improve models. 
 
