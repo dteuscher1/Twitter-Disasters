@@ -1,6 +1,11 @@
 ---
 title: "Disaster Tweets: NLP Approaches"
-output: html_document
+output: 
+  html_document:
+    toc: TRUE
+    theme: united
+    number_sections: TRUE
+    code_folding: show
 ---
 
 ```{r setup, include=FALSE}
